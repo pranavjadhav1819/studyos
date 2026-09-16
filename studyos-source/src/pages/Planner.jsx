@@ -72,6 +72,18 @@ export default function Planner() {
               <option value={120}>2 hours</option>
               <option value={180}>3 hours</option>
               <option value={240}>4 hours</option>
+              <option value={300}>5 hours</option>
+              <option value={360}>6 hour</option>
+              <option value={420}>7 hours</option>
+              <option value={480}>8 hours</option>
+              <option value={540}>9 hours</option>
+              <option value={600}>10 hours</option>
+              <option value={660}>11 hours</option>
+              <option value={720}>12 hour</option>
+              <option value={780}>13 hours</option>
+              <option value={840}>14 hours</option>
+              <option value={900}>15 hours</option>
+              <option value={960}>16 hours</option>
             </select>
           </div>
         </div>
