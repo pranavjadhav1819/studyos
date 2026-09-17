@@ -100,12 +100,15 @@ export const DatabaseModal: React.FC<DatabaseModalProps> = ({ isOpen, onClose })
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Supabase Anon Public API Key
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-slate-300">
+                Supabase Publishable Key <span className="text-slate-400 font-normal">(Anon / Public)</span>
+              </label>
+              <span className="text-[10px] text-amber-400 font-medium">Use Publishable, NOT Secret</span>
+            </div>
             <input
               type="password"
-              placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+              placeholder="eyJhbGciOiJIUzI1Ni... or sb_publishable_..."
               value={anonKey}
               onChange={e => setAnonKey(e.target.value)}
               className="w-full px-3.5 py-2.5 rounded-xl bg-slate-850 border border-slate-750 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
