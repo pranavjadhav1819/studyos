@@ -1,4 +1,4 @@
-import { GoogleGenAI } from '@google/genai';
+﻿import { GoogleGenAI } from '@google/genai';
 import { Unit, Topic, QuizQuestion, Flashcard, TopicWeightage } from '../types';
 
 export interface SolvedDoubtResult {
@@ -9,14 +9,124 @@ export interface SolvedDoubtResult {
   relatedTopicName: string;
 }
 
+export interface ChatMessage {
+  role: 'user' | 'model';
+  text: string;
+}
+
+export interface StudyPlanResult {
+  days: {
+    dayNumber: number;
+    title: string;
+    focus: string;
+    tasks: { title: string; durationMins: number; type: string }[];
+  }[];
+  adaptiveNote: string;
+}
+
+/**
+ * Returns the effective Gemini API key.
+ * Priority: explicitly passed key > env variable VITE_GEMINI_API_KEY > localStorage
+ */
+function resolveApiKey(apiKey?: string): string {
+  if (apiKey && apiKey.trim()) return apiKey.trim();
+  const envKey = (import.meta.env?.VITE_GEMINI_API_KEY as string) || '';
+  if (envKey && envKey.trim() && envKey !== 'your-gemini-api-key') return envKey.trim();
+  const stored = localStorage.getItem('studyos_gemini_key') || '';
+  return stored.trim();
+}
+
 export class AIService {
   private static getClient(apiKey?: string): GoogleGenAI | null {
-    if (!apiKey) return null;
+    const key = resolveApiKey(apiKey);
+    if (!key) return null;
     try {
-      return new GoogleGenAI({ apiKey });
+      return new GoogleGenAI({ apiKey: key });
     } catch {
       return null;
     }
+  }
+
+  /** Check if Gemini AI is available (env, stored, or passed key) */
+  static isAIAvailable(apiKey?: string): boolean {
+    return Boolean(resolveApiKey(apiKey));
+  }
+
+  /**
+   * Multi-turn AI Chat for continuous doubt-solving sessions.
+   * Streams response text via onChunk callback.
+   */
+  static async chat(
+    history: ChatMessage[],
+    newUserMessage: string,
+    subjectContext: string,
+    apiKey?: string,
+    onChunk?: (chunk: string) => void
+  ): Promise<string> {
+    const client = this.getClient(apiKey);
+
+    if (client) {
+      try {
+        const systemInstruction = `You are study.AI — a world-class Socratic AI tutor for engineering and university students.
+Subject context: ${subjectContext}.
+Your personality: brilliant, precise, empathetic. You guide students to think rather than just giving answers.
+Always structure your responses with: clear explanation, a visual/code example where helpful, and an exam tip.
+Keep responses concise but complete. Use markdown formatting for clarity.`;
+
+        // Build contents array for multi-turn chat
+        const contents = [
+          ...history.map(msg => ({
+            role: msg.role as 'user' | 'model',
+            parts: [{ text: msg.text }]
+          })),
+          {
+            role: 'user' as const,
+            parts: [{ text: newUserMessage }]
+          }
+        ];
+
+        let fullText = '';
+
+        if (onChunk) {
+          // Streaming mode
+          const stream = await client.models.generateContentStream({
+            model: 'gemini-2.5-flash',
+            contents,
+            config: {
+              systemInstruction,
+              temperature: 0.7,
+              maxOutputTokens: 1024
+            }
+          });
+
+          for await (const chunk of stream) {
+            const chunkText = chunk.text || '';
+            fullText += chunkText;
+            onChunk(chunkText);
+          }
+        } else {
+          // Non-streaming mode
+          const res = await client.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents,
+            config: {
+              systemInstruction,
+              temperature: 0.7,
+              maxOutputTokens: 1024
+            }
+          });
+          fullText = res.text || '';
+        }
+
+        return fullText;
+      } catch (err) {
+        console.warn('Gemini chat failed, using offline engine:', err);
+      }
+    }
+
+    // Offline fallback
+    const result = this.solveDoubtOffline(newUserMessage, subjectContext);
+    return `**${result.simpleExplanation}**\n\n**Example:**\n\`\`\`\n${result.example}\n\`\`\`\n\n📌 **Remember:** ${result.rememberRule}\n\n⭐ **Exam Tip:** ${result.examTip}`;
   }
 
   /**
@@ -48,7 +158,8 @@ Provide an educational, high-yield response formatted STRICTLY as JSON with thes
           model: 'gemini-2.5-flash',
           contents: prompt,
           config: {
-            responseMimeType: 'application/json'
+            responseMimeType: 'application/json',
+            temperature: 0.4
           }
         });
 
@@ -101,7 +212,7 @@ Return a STRICT JSON array of Units matching this schema:
         "title": "Topic Name",
         "unitId": "unit-1",
         "hoursEstimated": 4,
-        "weightage": "High" | "Medium" | "Low",
+        "weightage": "High",
         "knowledgeScore": 50,
         "status": "unstudied",
         "keyConcepts": ["Concept 1", "Concept 2"],
@@ -115,7 +226,7 @@ Return a STRICT JSON array of Units matching this schema:
         const res = await client.models.generateContent({
           model: 'gemini-2.5-flash',
           contents: prompt,
-          config: { responseMimeType: 'application/json' }
+          config: { responseMimeType: 'application/json', temperature: 0.2 }
         });
 
         if (res.text) {
@@ -160,7 +271,7 @@ Return STRICT JSON array of objects matching:
         const res = await client.models.generateContent({
           model: 'gemini-2.5-flash',
           contents: prompt,
-          config: { responseMimeType: 'application/json' }
+          config: { responseMimeType: 'application/json', temperature: 0.5 }
         });
 
         if (res.text) {
@@ -190,7 +301,8 @@ Return STRICT JSON array of objects matching:
 ${content}`;
         const res = await client.models.generateContent({
           model: 'gemini-2.5-flash',
-          contents: prompt
+          contents: prompt,
+          config: { temperature: 0.3 }
         });
         if (res.text) return res.text.trim();
       } catch (err) {
@@ -231,7 +343,7 @@ Return STRICT JSON array:
         const res = await client.models.generateContent({
           model: 'gemini-2.5-flash',
           contents: prompt,
-          config: { responseMimeType: 'application/json' }
+          config: { responseMimeType: 'application/json', temperature: 0.4 }
         });
         if (res.text) {
           return JSON.parse(res.text);
@@ -249,6 +361,79 @@ Return STRICT JSON array:
         formula: content.includes('=') ? content.split('\n').find(l => l.includes('=')) : undefined
       }
     ];
+  }
+
+  /**
+   * AI-powered adaptive study plan generator.
+   */
+  static async generateAdaptiveStudyPlan(
+    subjectName: string,
+    daysLeft: number,
+    weakTopics: { name: string; score: number }[],
+    hoursPerDay: number,
+    apiKey?: string
+  ): Promise<string> {
+    const client = this.getClient(apiKey);
+
+    if (client) {
+      try {
+        const weakList = weakTopics.map(t => `${t.name} (${t.score}%)`).join(', ');
+        const prompt = `You are StudyOS AI Coach generating a personalized ${daysLeft}-day study plan for "${subjectName}".
+Student's weak areas: ${weakList || 'None identified yet'}.
+Available time: ${hoursPerDay} hours/day.
+
+Create a concise, motivating study plan focusing on:
+1. Prioritizing weak topics (scored < 60%)
+2. Spacing revision of stronger topics
+3. Including PYQ practice sessions
+4. Exam-day preparation
+
+Keep the plan actionable and specific. Format as markdown with day headers.`;
+
+        const res = await client.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+          config: { temperature: 0.6, maxOutputTokens: 800 }
+        });
+        if (res.text) return res.text.trim();
+      } catch (err) {
+        console.warn('Gemini study plan generation failed:', err);
+      }
+    }
+
+    return `**AI Study Plan for ${subjectName} (${daysLeft} days)**\n\nFocus on weak topics first, then consolidate strong areas with PYQ practice. Average ${hoursPerDay} hours/day.`;
+  }
+
+  /**
+   * AI explanation of a PYQ answer.
+   */
+  static async explainPYQ(
+    question: string,
+    modelAnswer: string,
+    subject: string,
+    apiKey?: string
+  ): Promise<string> {
+    const client = this.getClient(apiKey);
+
+    if (client) {
+      try {
+        const prompt = `You are a university exam tutor for ${subject}.
+Question: "${question}"
+Model Answer: "${modelAnswer}"
+
+Provide a detailed step-by-step explanation of why this is the correct answer, what examiners look for, and common mistakes. Format with clear sections using markdown.`;
+
+        const res = await client.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+          config: { temperature: 0.3, maxOutputTokens: 600 }
+        });
+        if (res.text) return res.text.trim();
+      } catch (err) {
+        console.warn('Gemini PYQ explanation failed:', err);
+      }
+    }
+    return modelAnswer;
   }
 
   // --- Local Fallback Engines ---
@@ -357,9 +542,9 @@ TLB acts as a fast cache for page table lookups.`,
           title: l.replace(/^[•\-\*\d\.\)]+\s*/, '').trim(),
           unitId: `unit-1-${Date.now()}`,
           hoursEstimated: 4,
-          weightage: 'High',
+          weightage: 'High' as const,
           knowledgeScore: 50,
-          status: 'unstudied',
+          status: 'unstudied' as const,
           keyConcepts: [l.slice(0, 20)],
           pyqFrequencyScore: 7,
           revisionIntervalDays: 3
@@ -417,7 +602,7 @@ TLB acts as a fast cache for page table lookups.`,
         question: `What trade-off is commonly observed when optimizing ${topicTitle}?`,
         options: [
           `Higher throughput may increase latency or context switching overhead for individual tasks`,
-          `Reduced memory size always doubles clock frequency`,
+          `Reduced memory size doubles clock frequency`,
           `Using threads eliminates the need for virtual memory`,
           `Zero fragmentation requires disabling all file systems`
         ],

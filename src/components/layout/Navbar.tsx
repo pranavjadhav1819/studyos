@@ -201,15 +201,20 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApiKeyModal, onOpenDatabas
         {/* AI Key Status Button */}
         <button
           onClick={onOpenApiKeyModal}
-          className={`p-2 rounded-lg border text-xs transition-colors flex items-center gap-1.5 ${
+          className={`relative p-2 rounded-lg border text-xs transition-colors flex items-center gap-1.5 ${
             geminiApiKey
-              ? 'bg-brand-500/10 border-brand-500/30 text-brand-300'
+              ? 'bg-brand-500/10 border-brand-500/30 text-brand-300 shadow-sm shadow-brand-500/20'
               : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'
           }`}
-          title={geminiApiKey ? 'Gemini AI Connected' : 'Connect Gemini AI Key'}
+          title={geminiApiKey ? '✅ Gemini AI Connected — Click to configure' : 'Connect Gemini AI Key'}
         >
-          <Key className="w-3.5 h-3.5 text-brand-400" />
-          <span className="hidden xl:inline">{geminiApiKey ? 'Gemini' : 'AI Key'}</span>
+          <Key className={`w-3.5 h-3.5 ${geminiApiKey ? 'text-brand-400' : 'text-slate-400'}`} />
+          <span className="hidden xl:inline font-semibold">
+            {geminiApiKey ? '⚡ AI Live' : 'AI Key'}
+          </span>
+          {geminiApiKey && (
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-slate-900 animate-pulse" />
+          )}
         </button>
 
         {/* Notifications Dropdown */}

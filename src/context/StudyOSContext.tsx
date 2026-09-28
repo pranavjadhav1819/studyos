@@ -83,6 +83,7 @@ interface StudyOSContextType {
   setExamMode: (active: boolean) => void;
   geminiApiKey: string;
   setGeminiApiKey: (key: string) => void;
+  isAIEnabled: boolean;
   notification: string | null;
   setNotification: (msg: string | null) => void;
   askCoachForToday: (hoursAvailable: number) => TodaysFocusItem[];
@@ -114,7 +115,11 @@ export const StudyOSProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [pyqs, setPyqs] = useState<PYQ[]>(() => loadStored('pyqs', PYQS));
   const [notes, setNotes] = useState<Note[]>(() => loadStored('notes', NOTES));
   const [examMode, setExamMode] = useState<boolean>(false);
-  const [geminiApiKey, setGeminiApiKey] = useState<string>(() => localStorage.getItem('studyos_gemini_key') || '');
+  const [geminiApiKey, setGeminiApiKey] = useState<string>(() => {
+    const envKey = (import.meta.env?.VITE_GEMINI_API_KEY as string) || '';
+    const validEnvKey = envKey && envKey !== 'your-gemini-api-key' ? envKey.trim() : '';
+    return validEnvKey || localStorage.getItem('studyos_gemini_key') || '';
+  });
   const [notification, setNotification] = useState<string | null>('Adaptive Engine: Deadlocks (41%) requires attention before Day 4.');
 
   const [timer, setTimer] = useState<FocusTimer>({
@@ -617,6 +622,7 @@ export const StudyOSProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setExamMode,
         geminiApiKey,
         setGeminiApiKey,
+        isAIEnabled: Boolean(geminiApiKey),
         notification,
         setNotification,
         askCoachForToday
